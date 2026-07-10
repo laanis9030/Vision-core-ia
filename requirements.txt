@@ -1,3 +1,4 @@
 streamlit
 Pillow
 gdown
+numpy<2.0.0
