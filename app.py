@@ -1,3 +1,20 @@
+import os
+import gdown
+import streamlit as st
+
+# --- CONFIGURATION DU TÉLÉCHARGEMENT AUTOMATIQUE DU MODÈLE ---
+MODEL_PATH = "cerveau_weights_model.ckpt"
+FILE_ID = "1PZdv-iZB6bA-cGkg5wGZlb4qQmja60un"
+url = f"https://drive.google.com/uc?id={FILE_ID}"
+
+# Si le modèle n'est pas encore sur le serveur, on le télécharge
+if not os.path.exists(MODEL_PATH):
+    with st.spinner("🧠 Premier démarrage : Téléchargement du modèle d'IA..."):
+        gdown.download(url, MODEL_PATH, quiet=False)
+# -------------------------------------------------------------
+
+
+
 import streamlit as st
 import os
 from PIL import Image
