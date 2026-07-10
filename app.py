@@ -5,7 +5,7 @@ import streamlit as st
 from PIL import Image
 
 # ==============================================================================
-# 1. CONFIGURATION DE LA PAGE (OBLIGATOIREMENT EN PREMIER)
+# 1. CONFIGURATION DE LA PAGE
 # ==============================================================================
 st.set_page_config(
     page_title="VISION CORE IA - Inspection",
@@ -19,39 +19,38 @@ st.set_page_config(
 # ==============================================================================
 st.markdown("""
     <style>
-    /* Fond de l'application (Ardoise sombre) */
     .stApp { background-color: #0F172A; color: #F8FAFC; }
-    /* Personnalisation de la barre latérale (Sidebar) */
     section[data-testid="stSidebar"] { background-color: #1E293B !important; border-right: 1px solid #334155; }
-    /* Style des cartes / conteneurs principaux */
     div[data-testid="stContainer"] { background-color: #1E293B !important; border: 1px solid #334155 !important; border-radius: 12px !important; padding: 25px !important; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important; }
-    /* Forcer la couleur blanche/claire pour tous les textes importants */
     h1, h2, h3, h4, h5, h6, p, label, span { color: #F8FAFC !important; }
-    /* Personnalisation des étiquettes des métriques */
     div[data-testid="stMetricLabel"] > div { color: #94A3B8 !important; }
-    /* Séparateurs horizontaux discrets */
     hr { border-color: #334155 !important; }
     </style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 3. TÉLÉCHARGEMENT GOOGLE DRIVE AUTOMATIQUE
+# 3. TÉLÉCHARGEMENT GOOGLE DRIVE OPTIMISÉ (0 DUPLICATION)
 # ==============================================================================
 FILE_ID = "1PZdv-iZB6bA-cGkg5wGZlb4qQmja60un"
 url = f"https://drive.google.com/uc?id={FILE_ID}"
 LOCAL_TEMP_MODEL = "cerveau_weights_model.ckpt"
 
 if not os.path.exists(LOCAL_TEMP_MODEL):
-    with st.spinner("🧠 Téléchargement initial du modèle d'IA depuis le Cloud..."):
+    with st.spinner("🧠 Téléchargement initial du modèle d'IA (238 Mo) depuis le Cloud..."):
         gdown.download(url, LOCAL_TEMP_MODEL, quiet=False)
 
 def verifier_et_placer_modele(target_dir):
-    """Vérifie si le dossier existe, le crée si besoin, et y copie le modèle."""
+    """Crée un lien physique au lieu de copier pour économiser 100% de la RAM."""
     target_file = os.path.join(target_dir, "model.ckpt")
     if not os.path.exists(target_file):
         os.makedirs(target_dir, exist_ok=True)
         if os.path.exists(LOCAL_TEMP_MODEL):
-            shutil.copy(LOCAL_TEMP_MODEL, target_file)
+            try:
+                # Création d'un lien (Hardlink) : Instantané et 0 surcharge mémoire
+                os.link(LOCAL_TEMP_MODEL, target_file)
+            except Exception:
+                # Plan B de secours si le système de fichiers bloque les liens
+                shutil.copy(LOCAL_TEMP_MODEL, target_file)
 
 # ==============================================================================
 # 4. EN-TÊTE DE L'INTERFACE
@@ -66,7 +65,7 @@ with col_titre:
 st.divider()
 
 # ==============================================================================
-# 5. BARRE LATÉRALE : SÉLECTION DU MATÉRIEL & ROUTAGE DU MODÈLE
+# 5. BARRE LATÉRALE : SÉLECTION DU MATÉRIEL & ROUTAGE
 # ==============================================================================
 st.sidebar.header("⚙️ Configuration Système")
 
@@ -95,7 +94,7 @@ nom_materiel = config_active["nom_technique"]
 dossier_cible = config_active["dossier_poids"]
 chemin_modele = os.path.join(dossier_cible, "model.ckpt")
 
-# Déplacement automatique du fichier dans le bon dossier selon le choix
+# Création instantanée du lien pour le matériel ciblé
 verifier_et_placer_modele(dossier_cible)
 
 st.sidebar.markdown(f"**Composant ciblé :** `{nom_materiel}`")
@@ -106,7 +105,6 @@ if os.path.exists(chemin_modele):
 else:
     st.sidebar.error(f"⚠️ Poids introuvables pour `{nom_materiel}`.", icon="❌")
     modele_pret = False
-
 
 # ==============================================================================
 # 6. ZONE PRINCIPALE : ACQUISITION ET DIAGNOSTIC
@@ -130,7 +128,8 @@ else:
             if fichier_image is not None:
                 st.divider()
                 image = Image.open(fichier_image)
-                st.image(image, caption=f"Flux d'acquisition actif : {nom_materiel}", use_container_width=True)
+                # Correction de l'avertissement Streamlit pour l'affichage d'image
+                st.image(image, caption=f"Flux d'acquisition actif : {nom_materiel}")
                 
     with col_droite:
         with st.container():
