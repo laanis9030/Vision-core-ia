@@ -32,7 +32,7 @@ torch.set_num_threads(1)
 from anomalib.deploy import TorchInferencer
 
 # -----------------------------------------------------------------------------
-# 1. CONFIGURATION DES CATÉGORIES ET IDENTIFIANTS GOOGLE DRIVE
+# 1. CONFIGURATION DES CATÉGORIES ET SEUILS OPTIMAUX
 # -----------------------------------------------------------------------------
 DRIVE_MODEL_IDS = {
     "metal_nut": "1I9lZY-d0ksDkVsk6EPXh0YS2A_SZwueL",
@@ -40,7 +40,7 @@ DRIVE_MODEL_IDS = {
     "carpet": "13bwkq2S8ZWhTuyiKVTlyOAlTbFB2-M7E",
 }
 
-# Configuration des seuils calibrés
+# Seuils de décision calibrés par catégorie
 CATEGORIES = {
     "metal_nut": {"label": "Écrou en métal (metal_nut)", "threshold": 0.62},
     "transistor": {"label": "Transistor (transistor)", "threshold": 0.60},
@@ -51,7 +51,7 @@ MODELS_DIR = Path(__file__).resolve().parent / "models"
 
 
 # -----------------------------------------------------------------------------
-# 2. TÉLÉCHARGEMENT ET INFÉRENCE CPU
+# 2. TÉLÉCHARGEMENT ET LOGIQUE D'INFÉRENCE CPU
 # -----------------------------------------------------------------------------
 def extract_gdrive_id(url_or_id: str) -> str:
     match = re.search(r'[-\w]{25,}', url_or_id)
@@ -102,22 +102,23 @@ class Inspector:
             out = self.inferencer.predict(image)
         latency = (time.perf_counter() - t0) * 1000
 
+        # Score global d'anomalie de l'image
         score = float(out.pred_score.flatten()[0])
+        
+        # Carte d'anomalie au niveau pixel
         amap_raw = out.anomaly_map.detach().cpu().numpy().squeeze().astype(np.float32)
         amap_resized = cv2.resize(amap_raw, (w, h), interpolation=cv2.INTER_LINEAR)
 
-        # Normalisation Min-Max dynamique pour empêcher la saturation à 100%
-        a_min, a_max = amap_resized.min(), amap_resized.max()
-        if a_max > 1.0 or a_min < 0.0:
-            if a_max > a_min:
-                amap_norm = (amap_resized - a_min) / (a_max - a_min + 1e-8)
-            else:
-                amap_norm = np.zeros_like(amap_resized)
-        else:
-            amap_norm = np.clip(amap_resized, 0, 1)
+        # Découpage sur l'échelle absolue (0.0 à 1.0) sans déformation Min-Max
+        amap_vis = np.clip(amap_resized, 0.0, 1.0)
 
-        mask = (amap_norm >= sensitivity).astype(np.uint8)
-        return Result(score, score >= sensitivity, amap_norm, mask, latency)
+        # Décision de conformité globale basée sur le score de l'image
+        is_defective = score >= sensitivity
+
+        # Masque binaire localisé basé uniquement sur les pixels dépassant le seuil
+        mask = (amap_vis >= sensitivity).astype(np.uint8)
+
+        return Result(score, is_defective, amap_vis, mask, latency)
 
 
 def overlay(image: Image.Image, amap: np.ndarray, alpha: float = 0.50) -> Image.Image:
@@ -177,7 +178,7 @@ with st.sidebar:
         max_value=0.90,
         value=default_thresh,
         step=0.01,
-        help="Ajustez la sensibilité si des pièces conformes sont détectées défectueuses.",
+        help="Seuil calibré dynamiquement selon la catégorie pour éviter les faux rejets.",
     )
     st.markdown("---")
     st.markdown("### ⚡ Spécifications Modèle")
@@ -190,7 +191,7 @@ st.title("🔬 VISION CORE IA")
 st.markdown("<h4 style='color: #94A3B8 !important; margin-top: -15px;'>Inspection Visuelle Automatisée & Explicable par Deep Learning</h4>", unsafe_allow_html=True)
 st.divider()
 
-# Gestion de la mémoire de session (1 seul modèle en RAM à la fois)
+# Gestion mémoire : 1 seul modèle à la fois en RAM
 if "current_category" not in st.session_state:
     st.session_state["current_category"] = None
     st.session_state["inspector"] = None
