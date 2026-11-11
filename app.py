@@ -40,7 +40,6 @@ DRIVE_MODEL_IDS = {
     "carpet": "13bwkq2S8ZWhTuyiKVTlyOAlTbFB2-M7E",
 }
 
-# Seuils de décision calibrés par catégorie
 CATEGORIES = {
     "metal_nut": {"label": "Écrou en métal (metal_nut)", "threshold": 0.62},
     "transistor": {"label": "Transistor (transistor)", "threshold": 0.60},
@@ -102,23 +101,22 @@ class Inspector:
             out = self.inferencer.predict(image)
         latency = (time.perf_counter() - t0) * 1000
 
-        # Score global d'anomalie de l'image
         score = float(out.pred_score.flatten()[0])
-        
-        # Carte d'anomalie au niveau pixel
         amap_raw = out.anomaly_map.detach().cpu().numpy().squeeze().astype(np.float32)
         amap_resized = cv2.resize(amap_raw, (w, h), interpolation=cv2.INTER_LINEAR)
-
-        # Découpage sur l'échelle absolue (0.0 à 1.0) sans déformation Min-Max
         amap_vis = np.clip(amap_resized, 0.0, 1.0)
 
-        # Décision de conformité globale basée sur le score de l'image
         is_defective = score >= sensitivity
-
-        # Masque binaire localisé basé uniquement sur les pixels dépassant le seuil
         mask = (amap_vis >= sensitivity).astype(np.uint8)
 
         return Result(score, is_defective, amap_vis, mask, latency)
+
+
+# Gestion automatique de la mémoire : Streamlit évince l'ancien modèle avant d'en charger un nouveau
+@st.cache_resource(max_entries=1)
+def get_cached_inspector(category_name: str) -> Inspector:
+    gc.collect()
+    return Inspector(category_name)
 
 
 def overlay(image: Image.Image, amap: np.ndarray, alpha: float = 0.50) -> Image.Image:
@@ -191,24 +189,14 @@ st.title("🔬 VISION CORE IA")
 st.markdown("<h4 style='color: #94A3B8 !important; margin-top: -15px;'>Inspection Visuelle Automatisée & Explicable par Deep Learning</h4>", unsafe_allow_html=True)
 st.divider()
 
-# Gestion mémoire : 1 seul modèle à la fois en RAM
-if "current_category" not in st.session_state:
-    st.session_state["current_category"] = None
-    st.session_state["inspector"] = None
+# Chargement du modèle avec cache d'élément unique (libération automatique de la RAM)
+try:
+    with st.spinner(f"⚡ Chargement optimisé du modèle {category}..."):
+        inspector = get_cached_inspector(category)
+except Exception as e:
+    st.error(f"❌ Erreur lors du chargement du modèle : {e}")
+    st.stop()
 
-if st.session_state["current_category"] != category:
-    st.session_state["inspector"] = None
-    gc.collect()
-    
-    try:
-        with st.spinner(f"⚡ Chargement optimisé du modèle {category}..."):
-            st.session_state["inspector"] = Inspector(category)
-            st.session_state["current_category"] = category
-    except Exception as e:
-        st.error(f"❌ Erreur d'initialisation : {e}")
-        st.stop()
-
-inspector = st.session_state["inspector"]
 st.sidebar.success(f"🧠 Modèle `{category}` actif (CPU)")
 
 # Disposition principale
