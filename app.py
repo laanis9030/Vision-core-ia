@@ -40,7 +40,7 @@ MODELS_DIR = Path(__file__).resolve().parent / "models"
 
 
 # -----------------------------------------------------------------------------
-# 2. EXTRACTION ET INFÉRENCE SANS ÉLÉMENTS UI DANS LE CACHE
+# 2. TÉLÉCHARGEMENT ET LOGIQUE D'INFÉRENCE
 # -----------------------------------------------------------------------------
 def extract_gdrive_id(url_or_id: str) -> str:
     """Extrait l'ID Google Drive d'une URL complète ou d'une chaîne brute."""
@@ -49,7 +49,7 @@ def extract_gdrive_id(url_or_id: str) -> str:
 
 
 def ensure_model_downloaded(category: str) -> Path:
-    """Télécharge le modèle .pt sans appeler d'éléments graphiques Streamlit."""
+    """Télécharge le modèle .pt depuis Google Drive s'il n'existe pas localement."""
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     model_file = MODELS_DIR / f"{category}.pt"
 
@@ -59,7 +59,8 @@ def ensure_model_downloaded(category: str) -> Path:
         
         if file_id:
             print(f"Téléchargement du modèle {category} (ID: {file_id})...")
-            gdown.download(id=file_id, output=str(model_file), quiet=False)
+            url = f"https://drive.google.com/uc?id={file_id}"
+            gdown.download(url, str(model_file), quiet=False)
         else:
             raise FileNotFoundError(
                 f"Modèle introuvable localement pour '{category}' et aucun ID Google Drive valide n'a été fourni."
@@ -195,12 +196,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-
-@st.cache_resource(show_spinner=False)
-def load_inspector_cached(cat: str) -> Inspector:
-    return Inspector(cat)
-
-
 # Barre Latérale
 with st.sidebar:
     st.markdown("## ⚙️ Configuration Système")
@@ -229,14 +224,21 @@ st.title("🔬 VISION CORE IA")
 st.markdown("<h4 style='color: #94A3B8 !important; margin-top: -15px;'>Inspection Visuelle Automatisée & Explicable par Deep Learning</h4>", unsafe_allow_html=True)
 st.divider()
 
-# Chargement du modèle
+# Initialisation du dictionnaire dans st.session_state (évite l'erreur de cache)
+if "inspectors" not in st.session_state:
+    st.session_state["inspectors"] = {}
+
+# Chargement du modèle avec st.session_state
 try:
-    with st.spinner("⚡ Téléchargement et chargement du réseau d'inférence..."):
-        inspector = load_inspector_cached(category)
+    if category not in st.session_state["inspectors"]:
+        with st.spinner(f"⚡ Téléchargement et chargement du modèle {category}..."):
+            st.session_state["inspectors"][category] = Inspector(category)
+    
+    inspector = st.session_state["inspectors"][category]
     st.sidebar.success(f"🧠 Modèle `{category}` actif ({inspector.device})")
 except Exception as e:
-    st.error(f"❌ Erreur de chargement du modèle : {e}")
-    st.info("Vérifiez l'accès public des fichiers sur Google Drive.")
+    st.error(f"❌ Erreur lors de l'initialisation du modèle : {e}")
+    st.info("Vérifiez la connexion réseau et l'accès public des fichiers sur Google Drive.")
     st.stop()
 
 # Disposition principale en 2 colonnes
