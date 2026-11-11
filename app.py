@@ -1,11 +1,12 @@
 """
 Vision Core IA — Application Web d'Inspection Visuelle et Détection d'Anomalies
-Déployable directement sur Streamlit Community Cloud.
+Version optimisée contre la saturation RAM (OOM) pour Streamlit Cloud.
 """
 
 import os
 import io
 import re
+import gc
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,7 +31,6 @@ DRIVE_MODEL_IDS = {
     "carpet": "13bwkq2S8ZWhTuyiKVTlyOAlTbFB2-M7E",
 }
 
-# Configuration avec seuils calibrés par catégorie (score F0.5)
 CATEGORIES = {
     "metal_nut": {"label": "Écrou en métal (metal_nut)", "threshold": 0.62},
     "transistor": {"label": "Transistor (transistor)", "threshold": 0.60},
@@ -207,7 +207,6 @@ with st.sidebar:
         format_func=lambda c: CATEGORIES[c]["label"],
     )
     
-    # Valeur par défaut dynamique basée sur la catégorie sélectionnée
     default_thresh = CATEGORIES[category]["threshold"]
     
     sensitivity = st.slider(
@@ -229,23 +228,31 @@ st.title("🔬 VISION CORE IA")
 st.markdown("<h4 style='color: #94A3B8 !important; margin-top: -15px;'>Inspection Visuelle Automatisée & Explicable par Deep Learning</h4>", unsafe_allow_html=True)
 st.divider()
 
-# Gestion du cache modèle dans st.session_state
-if "inspectors" not in st.session_state:
-    st.session_state["inspectors"] = {}
+# GESTION MÉMOIRE STRICTE (1 SEUL MODÈLE EN RAM À LA FOIS)
+if "current_category" not in st.session_state:
+    st.session_state["current_category"] = None
+    st.session_state["inspector"] = None
 
-try:
-    if category not in st.session_state["inspectors"]:
+# Si l'utilisateur change de catégorie, on purge explicitement l'ancien modèle de la RAM
+if st.session_state["current_category"] != category:
+    st.session_state["inspector"] = None
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        
+    try:
         with st.spinner(f"⚡ Téléchargement et chargement du modèle {category}..."):
-            st.session_state["inspectors"][category] = Inspector(category)
-    
-    inspector = st.session_state["inspectors"][category]
-    st.sidebar.success(f"🧠 Modèle `{category}` actif ({inspector.device})")
-except Exception as e:
-    st.error(f"❌ Erreur lors de l'initialisation du modèle : {e}")
-    st.info("Vérifiez l'accès public des fichiers sur Google Drive.")
-    st.stop()
+            st.session_state["inspector"] = Inspector(category)
+            st.session_state["current_category"] = category
+    except Exception as e:
+        st.error(f"❌ Erreur lors de l'initialisation du modèle : {e}")
+        st.info("Vérifiez l'accès public des fichiers sur Google Drive.")
+        st.stop()
 
-# Layout principal
+inspector = st.session_state["inspector"]
+st.sidebar.success(f"🧠 Modèle `{category}` actif ({inspector.device})")
+
+# Disposition principale en 2 colonnes
 col_left, col_right = st.columns([1, 1], gap="large")
 
 with col_left:
