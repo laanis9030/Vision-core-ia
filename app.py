@@ -30,10 +30,11 @@ DRIVE_MODEL_IDS = {
     "carpet": "13bwkq2S8ZWhTuyiKVTlyOAlTbFB2-M7E",
 }
 
+# Configuration avec seuils calibrés par catégorie (score F0.5)
 CATEGORIES = {
-    "metal_nut": {"label": "Écrou en métal (metal_nut)"},
-    "transistor": {"label": "Transistor (transistor)"},
-    "carpet": {"label": "Textile (carpet)"},
+    "metal_nut": {"label": "Écrou en métal (metal_nut)", "threshold": 0.62},
+    "transistor": {"label": "Transistor (transistor)", "threshold": 0.60},
+    "carpet": {"label": "Textile (carpet)", "threshold": 0.56},
 }
 
 MODELS_DIR = Path(__file__).resolve().parent / "models"
@@ -205,13 +206,17 @@ with st.sidebar:
         list(CATEGORIES),
         format_func=lambda c: CATEGORIES[c]["label"],
     )
+    
+    # Valeur par défaut dynamique basée sur la catégorie sélectionnée
+    default_thresh = CATEGORIES[category]["threshold"]
+    
     sensitivity = st.slider(
         "2. Seuil de Décision (Sensibilité)",
         min_value=0.10,
         max_value=0.90,
-        value=0.55,
-        step=0.05,
-        help="0,55 = Seuil optimal calibré pour supprimer les faux positifs.",
+        value=default_thresh,
+        step=0.01,
+        help="Seuil calibré dynamiquement selon la catégorie pour éviter les faux rejets sur les reflets.",
     )
     st.markdown("---")
     st.markdown("### ⚡ Spécifications Modèle")
@@ -224,11 +229,10 @@ st.title("🔬 VISION CORE IA")
 st.markdown("<h4 style='color: #94A3B8 !important; margin-top: -15px;'>Inspection Visuelle Automatisée & Explicable par Deep Learning</h4>", unsafe_allow_html=True)
 st.divider()
 
-# Initialisation du dictionnaire dans st.session_state (évite l'erreur de cache)
+# Gestion du cache modèle dans st.session_state
 if "inspectors" not in st.session_state:
     st.session_state["inspectors"] = {}
 
-# Chargement du modèle avec st.session_state
 try:
     if category not in st.session_state["inspectors"]:
         with st.spinner(f"⚡ Téléchargement et chargement du modèle {category}..."):
@@ -238,10 +242,10 @@ try:
     st.sidebar.success(f"🧠 Modèle `{category}` actif ({inspector.device})")
 except Exception as e:
     st.error(f"❌ Erreur lors de l'initialisation du modèle : {e}")
-    st.info("Vérifiez la connexion réseau et l'accès public des fichiers sur Google Drive.")
+    st.info("Vérifiez l'accès public des fichiers sur Google Drive.")
     st.stop()
 
-# Disposition principale en 2 colonnes
+# Layout principal
 col_left, col_right = st.columns([1, 1], gap="large")
 
 with col_left:
@@ -293,3 +297,4 @@ with col_right:
             file_name=f"rapport_{category}.png",
             mime="image/png",
         )
+            
