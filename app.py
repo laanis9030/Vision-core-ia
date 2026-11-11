@@ -26,9 +26,9 @@ from anomalib.deploy import TorchInferencer
 # Remplacez les chaînes ci-dessous par les IDs réels de vos fichiers .pt sur Google Drive
 # Exemple : pour le lien https://drive.google.com/file/d/1a2b3c4d5e6f7g8h9/view -> ID = "1a2b3c4d5e6f7g8h9"
 DRIVE_MODEL_IDS = {
-    "metal_nut": "https://drive.google.com/file/d/13bwkq2S8ZWhTuyiKVTlyOAlTbFB2-M7E/view?usp=drive_link",
-    "transistor": "https://drive.google.com/file/d/1I9lZY-d0ksDkVsk6EPXh0YS2A_SZwueL/view?usp=drive_link",
-    "carpet": "https://drive.google.com/file/d/1L1I3KDNQS_lIj_Xuf--u0x4SudEQRO2J/view?usp=drive_link",
+    "metal_nut": "13bwkq2S8ZWhTuyiKVTlyOAlTbFB2-M7E",
+    "transistor": "1I9lZY-d0ksDkVsk6EPXh0YS2A_SZwueL",
+    "carpet": "1L1I3KDNQS_lIj_Xuf--u0x4SudEQRO2J",
 }
 
 CATEGORIES = {
