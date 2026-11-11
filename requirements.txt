@@ -1,4 +1,9 @@
-streamlit
-Pillow
+anomalib==2.5.0
+streamlit>=1.30.0
+opencv-python-headless
+scikit-learn
 gdown
-numpy<2.0.0
+torch
+torchvision
+pillow
+numpy
