@@ -5,6 +5,7 @@ Déployable directement sur Streamlit Community Cloud.
 
 import os
 import io
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,14 +24,12 @@ from anomalib.deploy import TorchInferencer
 # -----------------------------------------------------------------------------
 # 1. CONFIGURATION DES CATÉGORIES ET IDENTIFIANTS GOOGLE DRIVE
 # -----------------------------------------------------------------------------
-# Remplacez les chaînes ci-dessous par les IDs réels de vos fichiers .pt sur Google Drive
-# Exemple : pour le lien https://drive.google.com/file/d/1a2b3c4d5e6f7g8h9/view -> ID = "1a2b3c4d5e6f7g8h9"
+# Insérez ici l'ID ou le lien de partage Google Drive de chaque modèle .pt
 DRIVE_MODEL_IDS = {
-    "metal_nut": "13bwkq2S8ZWhTuyiKVTlyOAlTbFB2-M7E",
-    "transistor": "1I9lZY-d0ksDkVsk6EPXh0YS2A_SZwueL",
-    "carpet": "1L1I3KDNQS_lIj_Xuf--u0x4SudEQRO2J",
+    "metal_nut": "13bwkq2S8ZWhTuyiKVTlyOAlTbFB2-M7E",
+    "transistor": "1I9lZY-d0ksDkVsk6EPXh0YS2A_SZwueL",
+    "carpet": "1L1I3KDNQS_lIj_Xuf--u0x4SudEQRO2J",
 }
-
 CATEGORIES = {
     "metal_nut": {"label": "Écrou en métal (metal_nut)"},
     "transistor": {"label": "Transistor (transistor)"},
@@ -41,8 +40,34 @@ MODELS_DIR = Path(__file__).resolve().parent / "models"
 
 
 # -----------------------------------------------------------------------------
-# 2. GESTION DES MODÈLES & INFÉRENCE
+# 2. EXTRACTION ET INFÉRENCE SANS ÉLÉMENTS UI DANS LE CACHE
 # -----------------------------------------------------------------------------
+def extract_gdrive_id(url_or_id: str) -> str:
+    """Extrait l'ID Google Drive d'une URL complète ou d'une chaîne brute."""
+    match = re.search(r'[-\w]{25,}', url_or_id)
+    return match.group(0) if match else url_or_id
+
+
+def ensure_model_downloaded(category: str) -> Path:
+    """Télécharge le modèle .pt sans appeler d'éléments graphiques Streamlit."""
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    model_file = MODELS_DIR / f"{category}.pt"
+
+    if not model_file.exists():
+        raw_val = DRIVE_MODEL_IDS.get(category, "")
+        file_id = extract_gdrive_id(raw_val)
+        
+        if file_id and not file_id.startswith("VOTRE_FILE_ID"):
+            print(f"Téléchargement du modèle {category} (ID: {file_id})...")
+            gdown.download(id=file_id, output=str(model_file), quiet=False)
+        else:
+            raise FileNotFoundError(
+                f"Modèle introuvable localement pour '{category}' et aucun ID Google Drive valide n'a été fourni."
+            )
+
+    return model_file
+
+
 @dataclass
 class Result:
     score: float
@@ -50,25 +75,6 @@ class Result:
     anomaly_map: np.ndarray
     mask: np.ndarray
     latency_ms: float
-
-
-def ensure_model_downloaded(category: str) -> Path:
-    """Télécharge le modèle .pt depuis Google Drive s'il n'est pas présent localement."""
-    MODELS_DIR.mkdir(parents=True, exist_ok=True)
-    model_file = MODELS_DIR / f"{category}.pt"
-
-    if not model_file.exists():
-        file_id = DRIVE_MODEL_IDS.get(category, "")
-        if file_id and not file_id.startswith("VOTRE_FILE_ID"):
-            url = f"https://drive.google.com/uc?id={file_id}"
-            st.toast(f"📥 Téléchargement du modèle {category} depuis Google Drive...", icon="📦")
-            gdown.download(url, str(model_file), quiet=False)
-        else:
-            raise FileNotFoundError(
-                f"Modèle introuvable localement pour '{category}' et aucun ID Google Drive valide renseigné dans app.py."
-            )
-
-    return model_file
 
 
 class Inspector:
@@ -96,7 +102,6 @@ class Inspector:
 
 
 def overlay(image: Image.Image, amap: np.ndarray, alpha: float = 0.50) -> Image.Image:
-    """Superpose la carte de chaleur thermique sur l'image d'origine."""
     rgb = np.array(image.convert("RGB"))
     heat = cv2.applyColorMap((np.clip(amap, 0, 1) * 255).astype(np.uint8), cv2.COLORMAP_JET)
     heat = cv2.cvtColor(heat, cv2.COLOR_BGR2RGB)
@@ -104,7 +109,6 @@ def overlay(image: Image.Image, amap: np.ndarray, alpha: float = 0.50) -> Image.
 
 
 def draw_contours(image: Image.Image, mask: np.ndarray) -> Image.Image:
-    """Entoure les zones défectueuses d'un contour bleu turquoise néon."""
     rgb = np.array(image.convert("RGB"))
     cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     cv2.drawContours(rgb, cnts, -1, (0, 229, 255), max(2, rgb.shape[0] // 180))
@@ -121,30 +125,22 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Injection CSS Personnalisée (Thème Noir Deep & Bleu Turquoise #00E5FF)
 st.markdown(
     """
 <style>
-    /* Fond principal et typographie */
     .stApp {
         background-color: #0A0E17;
         color: #E2E8F0;
         font-family: 'Inter', system-ui, -apple-system, sans-serif;
     }
-    
-    /* Barre latérale */
     [data-testid="stSidebar"] {
         background-color: #111827;
         border-right: 1px solid #1E293B;
     }
-    
-    /* Titres principal et secondaires */
     h1, h2, h3, h4 {
         color: #00E5FF !important;
         font-weight: 700 !important;
     }
-    
-    /* Cartes de métriques */
     .metric-card {
         background: #151D2A;
         border: 1px solid #1E293B;
@@ -165,8 +161,6 @@ st.markdown(
         font-weight: 800;
         margin-top: 4px;
     }
-    
-    /* Badges de statut */
     .badge-pass {
         background-color: rgba(16, 185, 129, 0.15);
         color: #10B981;
@@ -187,8 +181,6 @@ st.markdown(
         font-size: 1.1rem;
         display: inline-block;
     }
-    
-    /* Boutons personnalisés */
     .stButton>button, .stDownloadButton>button {
         background: linear-gradient(135deg, #00E5FF 0%, #0088FF 100%) !important;
         color: #050B14 !important;
@@ -224,7 +216,7 @@ with st.sidebar:
         max_value=0.90,
         value=0.55,
         step=0.05,
-        help="0,55 = Seuil optimal calibré pour supprimer les faux positifs sur le métal.",
+        help="0,55 = Seuil optimal calibré pour supprimer les faux positifs.",
     )
     st.markdown("---")
     st.markdown("### ⚡ Spécifications Modèle")
@@ -237,9 +229,9 @@ st.title("🔬 VISION CORE IA")
 st.markdown("<h4 style='color: #94A3B8 !important; margin-top: -15px;'>Inspection Visuelle Automatisée & Explicable par Deep Learning</h4>", unsafe_allow_html=True)
 st.divider()
 
-# Chargement du modèle avec cache
+# Chargement sécurisé sans composants UI dans le cache
 try:
-    with st.spinner("⚡ Initialisation du réseau d'inférence..."):
+    with st.spinner("⚡ Téléchargement et chargement du réseau d'inférence..."):
         inspector = load_inspector_cached(category)
     st.sidebar.success(f"🧠 Modèle `{category}` actif ({inspector.device})")
 except Exception as e:
@@ -247,7 +239,7 @@ except Exception as e:
     st.info("Assurez-vous d'avoir renseigné les bons IDs Google Drive dans `DRIVE_MODEL_IDS` au début du fichier `app.py`.")
     st.stop()
 
-# Disposition en 2 colonnes
+# Disposition principale en 2 colonnes
 col_left, col_right = st.columns([1, 1], gap="large")
 
 with col_left:
