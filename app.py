@@ -1,11 +1,11 @@
 """
 Vision Core IA — Application Web d'Inspection Visuelle et Détection d'Anomalies
-Version ultra-optimisée mémoire (Anti-OOM Killer) pour Streamlit Cloud.
+Déployable sur Streamlit Community Cloud.
 """
 
 import os
 
-# 1. Variables d'environnement bas niveau pour brider la RAM AVANT tout import lourd
+# 1. Variables d'environnement bas niveau (Anti-OOM / Restriction CPU)
 os.environ["MALLOC_TRIM_THRESHOLD_"] = "100000"
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
@@ -28,7 +28,7 @@ import gdown
 from PIL import Image
 import streamlit as st
 
-# Limitation stricte du moteur PyTorch à 1 thread
+# Limitation PyTorch CPU
 torch.set_num_threads(1)
 
 from anomalib.deploy import TorchInferencer
@@ -52,7 +52,7 @@ MODELS_DIR = Path(__file__).resolve().parent / "models"
 
 
 # -----------------------------------------------------------------------------
-# 2. TÉLÉCHARGEMENT ET LOGIQUE D'INFÉRENCE CPU LIGHTWEIGHT
+# 2. TÉLÉCHARGEMENT ET INFÉRENCE CPU
 # -----------------------------------------------------------------------------
 def extract_gdrive_id(url_or_id: str) -> str:
     match = re.search(r'[-\w]{25,}', url_or_id)
@@ -125,7 +125,7 @@ def draw_contours(image: Image.Image, mask: np.ndarray) -> Image.Image:
 
 
 # -----------------------------------------------------------------------------
-# 3. INTERFACE STREAMLIT
+# 3. INTERFACE STREAMLIT (DESIGN NOIR & BLEU TURQUOISE)
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="Vision Core IA | Inspection Industrielle",
@@ -195,116 +195,5 @@ st.markdown(
         color: #050B14 !important;
         font-weight: 700 !important;
         border: none !important;
-        border-radius: 8px !important;
-        padding: 10px 24px !important;
-        box-shadow: 0 0 15px rgba(0, 229, 255, 0.3) !important;
-    }
-</style>
-""",
-    unsafe_allow_html=True,
-)
-
-# Barre Latérale
-with st.sidebar:
-    st.markdown("## ⚙️ Configuration Système")
-    st.markdown("---")
-    category = st.selectbox(
-        "1. Matériel à inspecter",
-        list(CATEGORIES),
-        format_func=lambda c: CATEGORIES[c]["label"],
-    )
-    
-    default_thresh = CATEGORIES[category]["threshold"]
-    
-    sensitivity = st.slider(
-        "2. Seuil de Décision (Sensibilité)",
-        min_value=0.10,
-        max_value=0.90,
-        value=default_thresh,
-        step=0.01,
-        help="Seuil calibré dynamiquement selon la catégorie pour éviter les faux rejets.",
-    )
-    st.markdown("---")
-    st.markdown("### ⚡ Spécifications Modèle")
-    st.markdown("- **Algorithme** : PatchCore (WideResNet-50)")
-    st.markdown("- **Mode** : Non supervisé")
-    st.markdown("- **Coreset Ratio** : 20%")
-
-# En-tête Principal
-st.title("🔬 VISION CORE IA")
-st.markdown("<h4 style='color: #94A3B8 !important; margin-top: -15px;'>Inspection Visuelle Automatisée & Explicable par Deep Learning</h4>", unsafe_allow_html=True)
-st.divider()
-
-# Gestion et libération mémoire en session
-if "current_category" not in st.session_state:
-    st.session_state["current_category"] = None
-    st.session_state["inspector"] = None
-
-if st.session_state["current_category"] != category:
-    st.session_state["inspector"] = None
-    gc.collect()
-    
-    try:
-        with st.spinner(f"⚡ Chargement optimisé du modèle {category}..."):
-            st.session_state["inspector"] = Inspector(category)
-            st.session_state["current_category"] = category
-    except Exception as e:
-        st.error(f"❌ Erreur d'initialisation : {e}")
-        st.stop()
-
-inspector = st.session_state["inspector"]
-st.sidebar.success(f"🧠 Modèle `{category}` actif (CPU)")
-
-# Disposition principale
-col_left, col_right = st.columns([1, 1], gap="large")
-
-with col_left:
-    st.markdown("### 📷 Acquisition de l'Image")
-    uploaded_file = st.file_uploader(
-        f"Chargez une image pour la catégorie '{category}'",
-        type=["png", "jpg", "jpeg"],
-    )
-    if uploaded_file:
-        image = Image.open(uploaded_file).convert("RGB")
-        st.image(image, caption="Image d'entrée reçue", width=None)
-    else:
-        st.info("💡 Veuillez sélectionner une image pour démarrer l'analyse en temps réel.")
-
-with col_right:
-    st.markdown("### 📊 Diagnostic & Décision IA")
-    if not uploaded_file:
-        st.warning("En attente de l'acquisition d'une image...")
-    else:
-        res = inspector.predict(image, sensitivity=sensitivity)
-        
-        if res.is_defective:
-            st.markdown(f'<div class="badge-fail">❌ PIÈCE DÉFECTUEUSE (Score: {res.score:.3f})</div>', unsafe_allow_html=True)
-        else:
-            st.markdown(f'<div class="badge-pass">✅ PIÈCE CONFORME (Score: {res.score:.3f})</div>', unsafe_allow_html=True)
-            
-        st.write("")
-        m1, m2, m3 = st.columns(3)
-        with m1:
-            st.markdown(f'<div class="metric-card"><div class="metric-title">Score Anomalie</div><div class="metric-value">{res.score:.2f}</div></div>', unsafe_allow_html=True)
-        with m2:
-            st.markdown(f'<div class="metric-card"><div class="metric-title">Surface Impactée</div><div class="metric-value">{100 * res.mask.mean():.1f}%</div></div>', unsafe_allow_html=True)
-        with m3:
-            st.markdown(f'<div class="metric-card"><div class="metric-title">Latence</div><div class="metric-value">{res.latency_ms:.0f} ms</div></div>', unsafe_allow_html=True)
-            
-        st.write("")
-        st.markdown("#### 🔍 Explicabilité Visuelle (XAI)")
-        tab1, tab2 = st.tabs(["🔥 Carte de Chaleur (Heatmap)", "🔴 Contours Localisés"])
-        with tab1:
-            st.image(overlay(image, res.anomaly_map), width=None)
-        with tab2:
-            st.image(draw_contours(image, res.mask), width=None)
-            
-        buf = io.BytesIO()
-        overlay(image, res.anomaly_map).save(buf, format="PNG")
-        st.download_button(
-            label="⬇️ Télécharger le Rapport Visuel",
-            data=buf.getvalue(),
-            file_name=f"rapport_{category}.png",
-            mime="image/png",
-        )
+        border-radius:
             
