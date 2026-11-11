@@ -40,11 +40,11 @@ DRIVE_MODEL_IDS = {
     "carpet": "13bwkq2S8ZWhTuyiKVTlyOAlTbFB2-M7E",
 }
 
-# Seuils baselines réajustés spécifiquement par catégorie
+# Configuration des seuils calibrés
 CATEGORIES = {
-    "metal_nut": {"label": "Écrou en métal (metal_nut)", "threshold": 0.64},
-    "transistor": {"label": "Transistor (transistor)", "threshold": 0.70},
-    "carpet": {"label": "Textile (carpet)", "threshold": 0.50},
+    "metal_nut": {"label": "Écrou en métal (metal_nut)", "threshold": 0.62},
+    "transistor": {"label": "Transistor (transistor)", "threshold": 0.60},
+    "carpet": {"label": "Textile (carpet)", "threshold": 0.56},
 }
 
 MODELS_DIR = Path(__file__).resolve().parent / "models"
@@ -103,10 +103,21 @@ class Inspector:
         latency = (time.perf_counter() - t0) * 1000
 
         score = float(out.pred_score.flatten()[0])
-        amap = out.anomaly_map.detach().cpu().numpy().squeeze().astype(np.float32)
-        amap = cv2.resize(np.clip(amap, 0, 1), (w, h), interpolation=cv2.INTER_LINEAR)
-        mask = (amap >= sensitivity).astype(np.uint8)
-        return Result(score, score >= sensitivity, amap, mask, latency)
+        amap_raw = out.anomaly_map.detach().cpu().numpy().squeeze().astype(np.float32)
+        amap_resized = cv2.resize(amap_raw, (w, h), interpolation=cv2.INTER_LINEAR)
+
+        # Normalisation Min-Max dynamique pour empêcher la saturation à 100%
+        a_min, a_max = amap_resized.min(), amap_resized.max()
+        if a_max > 1.0 or a_min < 0.0:
+            if a_max > a_min:
+                amap_norm = (amap_resized - a_min) / (a_max - a_min + 1e-8)
+            else:
+                amap_norm = np.zeros_like(amap_resized)
+        else:
+            amap_norm = np.clip(amap_resized, 0, 1)
+
+        mask = (amap_norm >= sensitivity).astype(np.uint8)
+        return Result(score, score >= sensitivity, amap_norm, mask, latency)
 
 
 def overlay(image: Image.Image, amap: np.ndarray, alpha: float = 0.50) -> Image.Image:
