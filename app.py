@@ -1,5 +1,4 @@
-
-    # Vision Core IA — Application Web d'Inspection Visuelle et Détection d'Anomalies
+# Vision Core IA — Application Web d'Inspection Visuelle et Détection d'Anomalies
 # Déployable sur Streamlit Community Cloud.
 
 import os
@@ -41,10 +40,11 @@ DRIVE_MODEL_IDS = {
     "carpet": "13bwkq2S8ZWhTuyiKVTlyOAlTbFB2-M7E",
 }
 
+# Seuils baselines réajustés spécifiquement par catégorie
 CATEGORIES = {
-    "metal_nut": {"label": "Écrou en métal (metal_nut)", "threshold": 0.62},
-    "transistor": {"label": "Transistor (transistor)", "threshold": 0.60},
-    "carpet": {"label": "Textile (carpet)", "threshold": 0.56},
+    "metal_nut": {"label": "Écrou en métal (metal_nut)", "threshold": 0.64},
+    "transistor": {"label": "Transistor (transistor)", "threshold": 0.70},
+    "carpet": {"label": "Textile (carpet)", "threshold": 0.50},
 }
 
 MODELS_DIR = Path(__file__).resolve().parent / "models"
@@ -166,7 +166,7 @@ with st.sidebar:
         max_value=0.90,
         value=default_thresh,
         step=0.01,
-        help="Seuil calibré dynamiquement selon la catégorie pour éviter les faux rejets.",
+        help="Ajustez la sensibilité si des pièces conformes sont détectées défectueuses.",
     )
     st.markdown("---")
     st.markdown("### ⚡ Spécifications Modèle")
