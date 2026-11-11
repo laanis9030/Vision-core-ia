@@ -24,12 +24,12 @@ from anomalib.deploy import TorchInferencer
 # -----------------------------------------------------------------------------
 # 1. CONFIGURATION DES CATÉGORIES ET IDENTIFIANTS GOOGLE DRIVE
 # -----------------------------------------------------------------------------
-# Insérez ici l'ID ou le lien de partage Google Drive de chaque modèle .pt
 DRIVE_MODEL_IDS = {
-    "metal_nut": "1I9lZY-d0ksDkVsk6EPXh0YS2A_SZwueL",
-    "transistor": "1L1I3KDNQS_lIj_Xuf--u0x4SudEQRO2J",
-    "carpet": "13bwkq2S8ZWhTuyiKVTlyOAlTbFB2-M7E",
+    "metal_nut": "1I9lZY-d0ksDkVsk6EPXh0YS2A_SZwueL",
+    "transistor": "1L1I3KDNQS_lIj_Xuf--u0x4SudEQRO2J",
+    "carpet": "13bwkq2S8ZWhTuyiKVTlyOAlTbFB2-M7E",
 }
+
 CATEGORIES = {
     "metal_nut": {"label": "Écrou en métal (metal_nut)"},
     "transistor": {"label": "Transistor (transistor)"},
@@ -57,7 +57,7 @@ def ensure_model_downloaded(category: str) -> Path:
         raw_val = DRIVE_MODEL_IDS.get(category, "")
         file_id = extract_gdrive_id(raw_val)
         
-        if file_id and not file_id.startswith("VOTRE_FILE_ID"):
+        if file_id:
             print(f"Téléchargement du modèle {category} (ID: {file_id})...")
             gdown.download(id=file_id, output=str(model_file), quiet=False)
         else:
@@ -229,14 +229,14 @@ st.title("🔬 VISION CORE IA")
 st.markdown("<h4 style='color: #94A3B8 !important; margin-top: -15px;'>Inspection Visuelle Automatisée & Explicable par Deep Learning</h4>", unsafe_allow_html=True)
 st.divider()
 
-# Chargement sécurisé sans composants UI dans le cache
+# Chargement du modèle
 try:
     with st.spinner("⚡ Téléchargement et chargement du réseau d'inférence..."):
         inspector = load_inspector_cached(category)
     st.sidebar.success(f"🧠 Modèle `{category}` actif ({inspector.device})")
 except Exception as e:
     st.error(f"❌ Erreur de chargement du modèle : {e}")
-    st.info("Assurez-vous d'avoir renseigné les bons IDs Google Drive dans `DRIVE_MODEL_IDS` au début du fichier `app.py`.")
+    st.info("Vérifiez l'accès public des fichiers sur Google Drive.")
     st.stop()
 
 # Disposition principale en 2 colonnes
